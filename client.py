@@ -7,7 +7,7 @@ import qt_elements as gui
 IP = 'XX.XX.XX.XX'
 PORT = 8085
 ADDR = (IP, PORT)
-MAX_BTYES = 1024
+MAX_BYTES = 1024
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect(ADDR)
@@ -28,7 +28,7 @@ class UserClient:
 
     def set_username(self):
         username = self.username_window.user_submission.text()
-        if username:
+        if username and username not in self.online_users and username.isalnum():
             setattr(self, 'client_username', username)
             sock.send(self.client_username.encode('utf-8'))
             self.username_window.hide()
@@ -37,10 +37,10 @@ class UserClient:
     def get_users(self):
         # receives online users from server and updates [self.online_users], removes users who have disconnected
         try:
-            all_users = eval(sock.recv(MAX_BTYES).decode())
+            all_users = eval(sock.recv(MAX_BYTES).decode())
             if all_users:
-                for user in [x for x in all_users if x not in self.online_users]:
-                    self.online_users.append(user)
+                for online_user in [x for x in all_users if x not in self.online_users]:
+                    self.online_users.append(online_user)
                 for offline_user in [x for x in self.online_users if x not in all_users]:
                     self.online_users.remove(offline_user)
 
@@ -51,7 +51,7 @@ class UserClient:
 
     def get_message(self):
         # receives message from server
-        msg = sock.recv(MAX_BTYES).decode('utf-8')
+        msg = sock.recv(MAX_BYTES).decode('utf-8')
 
         if msg:
             print(msg, self.online_users)
@@ -61,7 +61,7 @@ class UserClient:
         # sends message in self.message_area to server; connected to returnPress on self.message_area; '!quit' breaks loop
         msg = self.chat_window.message.text()
 
-        if msg == '!quit':
+        if msg == '!quit' or msg == '/q':
             sock.send(msg.encode('utf-8'))
             self.connected = False
             sys.exit()
@@ -78,8 +78,7 @@ class UserClient:
                 self.get_message()
             except Exception as e:
                 print(f'CLIENT - ERROR GETTING MESSAGES: {e}')
-                self.connected = False
-                sys.exit()
+                break
 
     def display_users(self):
         self.chat_window.user_display.setPlainText("\n".join(self.online_users))

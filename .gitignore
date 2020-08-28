@@ -109,6 +109,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+chat-env/
 env/
 venv/
 ENV/
@@ -138,6 +139,3 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
-
-# env
-chat-env/
