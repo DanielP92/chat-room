@@ -78,6 +78,7 @@ def client_communication(person):
 
             if msg in [bytes('!quit', 'utf-8'), bytes('/q', 'utf-8')]:
                 disconnect_client(person)
+                persons.remove(person)
                 break
 
             msg_li = msg.decode().split(" ")
