@@ -1,6 +1,7 @@
 import socket
 import json
 import re
+import time
 from threading import Thread
 from userclient import Person
 
@@ -31,22 +32,18 @@ def broadcast(msg, person):
         try:
             to_client(s, msg)
         except Exception as e:
-            print(f'SERVER - ERROR SENDING MESSAGE TO CLIENT {s}:\n {e}. REMOVING SOCKET FROM CONNECTIONS.')
-            persons.remove(person)
+            print(f'SERVER - ERROR SENDING MESSAGE TO CLIENT {s}:\n {e}. REFRESHING CONNECTIONS...')
             sockets = [x.socket for x in persons]
             usernames = [x.username for x in persons]
-            encoded_users = json.dumps(usernames).encode()
             print(f'Active connections: {len(sockets)}')
 
 
 def disconnect_client(person):
     disconnect_string = f'{person.username} has disconnected!'.encode('utf-8')
     broadcast(disconnect_string, person)
-    persons.remove(person)
 
     sockets = [x.socket for x in persons]
     usernames = [x.username for x in persons]
-    encoded_users = json.dumps(usernames).encode()
 
     print(f'{person.socket} has DISCONNECTED')
     print(f'Active connections: {len(sockets)}')
@@ -95,6 +92,7 @@ def client_communication(person):
 
         except ConnectionResetError as e:
             print(f'SERVER - CONNECTION RESET BY CLIENT {person.socket}. CLOSING CONNECTION...')
+            persons.remove(person)
             disconnect_client(person)
             break
 
@@ -103,6 +101,7 @@ def to_client(sock, msg):
     usernames = [x.username for x in persons]
     encoded_users = json.dumps(usernames).encode()
     sock.send(encoded_users)
+    time.sleep(0.1)
     sock.send(msg)
 
 

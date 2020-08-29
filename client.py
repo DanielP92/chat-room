@@ -1,6 +1,7 @@
 import sys
 import socket
 import json
+import time
 from threading import Thread
 import qt_elements as gui
 
@@ -69,6 +70,7 @@ class UserClient:
             sock.send(f'{self.client_username}: {msg}'.encode('utf-8'))
 
         self.chat_window.message.clear()
+        time.sleep(0.15)
 
     def recv_msg(self):
         # the server sends current users and message; function receives both and translates into data to facilitate gui update
