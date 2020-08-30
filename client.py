@@ -1,8 +1,8 @@
 import sys
 import socket
 import json
-import time
 from threading import Thread
+from playsound import playsound
 import qt_elements as gui
 
 IP = 'XX.XX.XX.XX'
@@ -26,6 +26,9 @@ class UserClient:
 
         self.new_msgs = []
         self.online_users = []
+        self.triggers = {'connect': self.connect_sound,
+                         'disconnect': self.disconnect_sound,
+                         'whisper': self.whisper_sound, }
 
     def set_username(self):
         username = self.username_window.user_submission.text()
@@ -35,49 +38,59 @@ class UserClient:
             self.username_window.hide()
             self.chat_window.show()
 
-    def get_users(self):
-        # receives online users from server and updates [self.online_users], removes users who have disconnected
-        try:
-            all_users = eval(sock.recv(MAX_BYTES).decode())
-            if all_users:
-                for online_user in [x for x in all_users if x not in self.online_users]:
-                    self.online_users.append(online_user)
-                for offline_user in [x for x in self.online_users if x not in all_users]:
-                    self.online_users.remove(offline_user)
-
-        except Exception as e:
-            print(f'CLIENT - ERROR GETTING USERS: {e}')
-            self.connected = False
-            sys.exit()
-
-    def get_message(self):
-        # receives message from server
-        msg = sock.recv(MAX_BYTES).decode('utf-8')
-
-        if msg:
-            print(msg, self.online_users)
-            self.new_msgs.append(msg)
-
     def send_msg(self):
         # sends message in self.message_area to server; connected to returnPress on self.message_area; '!quit' breaks loop
-        msg = self.chat_window.message.text()
+        msg_text = self.chat_window.message.text()
+        msg_dict = {'user': self.client_username, 'msg': msg_text}
+        encoded_data = json.dumps(msg_dict).encode()
 
-        if msg == '!quit' or msg == '/q':
-            sock.send(msg.encode('utf-8'))
+        if msg_text == ['!quit', '/q']:
+            sock.send(encoded_data)
             self.connected = False
             sys.exit()
         else:
-            sock.send(f'{self.client_username}: {msg}'.encode('utf-8'))
+            sock.send(encoded_data)
 
         self.chat_window.message.clear()
-        time.sleep(0.15)
+
+    def connect_sound(self):
+        playsound('user_online.wav', block=False)
+
+    def disconnect_sound(self):
+        playsound('user_offline.wav', block=False)
+
+    def whisper_sound(self):
+        if not self.chat_window.isActiveWindow():
+            playsound('whisper.wav', block=False)
 
     def recv_msg(self):
-        # the server sends current users and message; function receives both and translates into data to facilitate gui update
+        # receives data sent by the server; checks for message, updates [self.online_users], then updates [self.new_msgs] (as appropriate)
         while self.connected:
             try:
-                self.get_users()
-                self.get_message()
+                data = sock.recv(MAX_BYTES).decode('utf-8')
+                msg_dict = json.loads(data)
+                display_msg = ''
+
+                if msg_dict['msg']:
+                    for online_user in [x for x in msg_dict['active_users'] if x not in self.online_users]:
+                        self.online_users.append(online_user)
+                    for offline_user in [x for x in self.online_users if x not in msg_dict['active_users']]:
+                        self.online_users.remove(offline_user)
+
+                    if msg_dict['username']:
+                        display_msg = f"{msg_dict['username']}: {msg_dict['msg']}"
+                    else:
+                        display_msg = msg_dict['msg'].lstrip()
+
+                    if 'SYSMSG' not in display_msg:
+                        self.new_msgs.append(display_msg)
+
+                    if msg_dict['trigger']:
+                        triggered_function = self.triggers[msg_dict['trigger']]
+                        triggered_function()
+
+                    print(f"{msg_dict['username']} {msg_dict['msg']}", self.online_users)
+
             except Exception as e:
                 print(f'CLIENT - ERROR GETTING MESSAGES: {e}')
                 break
@@ -96,8 +109,8 @@ def start_client():
     chat_timer, user_timer = gui.QTimer(), gui.QTimer()
     chat_timer.timeout.connect(u.display_msgs)
     user_timer.timeout.connect(u.display_users)
-    chat_timer.start(100)
-    user_timer.start(1000)
+    chat_timer.start(500)
+    user_timer.start(2000)
 
     recv_thread = Thread(target=u.recv_msg)
     recv_thread.start()
