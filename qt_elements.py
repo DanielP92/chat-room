@@ -46,20 +46,27 @@ class ChatWindow(QMainWindow):
 
         outer_layout = QHBoxLayout()
         inner_layout_chat = QVBoxLayout()
+        message_bar = QHBoxLayout()
         inner_layout_usernames = QVBoxLayout()
         inner_layouts = [inner_layout_chat, inner_layout_usernames]
 
         outer_layout.setContentsMargins(20, 5, 20, 20)
         outer_layout.setSpacing(5)
 
+        self.send_button = QPushButton('Send')
+        self.message = QLineEdit(window)
+        message_bar.addWidget(self.send_button)
+        message_bar.addWidget(self.message)
+
         chat_label = QLabel('Chat:', window)
         self.chat_display = QPlainTextEdit(window)
         self.chat_display.setMinimumWidth(400)
-        self.message = QLineEdit(window)
 
-        chat_widgets = [chat_label, self.chat_display, self.message]
+        chat_widgets = [chat_label, self.chat_display]
         for w in chat_widgets:
             inner_layout_chat.addWidget(w)
+
+        inner_layout_chat.addLayout(message_bar)
 
         user_label = QLabel('Users:', window)
         self.user_display = QPlainTextEdit(window)

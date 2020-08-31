@@ -3,7 +3,7 @@ import json
 from threading import Thread
 from userclient import Person
 
-IP = 'XX.XX.XX.XX'
+IP = '192.168.0.5'
 PORT = 8085
 ADDR = (IP, PORT)
 MAX_BYTES = 1024
@@ -14,7 +14,7 @@ sock.bind(ADDR)
 live = True
 sock.listen(10)
 
-persons = []
+persons = {}
 sockets = []
 usernames = []
 
@@ -24,19 +24,25 @@ print(f'SERVER IS ONLINE: {sock}')
 
 def broadcast(client, msg, trigger=None):
     # sends current users and user message to all clients in [sockets]; if message can't be sent to client, exception is thrown and client removed from [sockets]
-    sockets = [x.socket for x in persons]
-    usernames = [x.username for x in persons]
+    usernames = [x.username for x in persons.values()]
 
     msg_dict = {'username': client, 'msg': msg, 'active_users': usernames, 'trigger': trigger}
-    encoded_data = json.dumps(msg_dict).encode()
 
-    for s in sockets:
+    for person in persons.values():
         try:
-            s.send(encoded_data)
+            if not msg_dict['username']:
+                encoded_data = json.dumps(msg_dict).encode()
+                person.socket.send(encoded_data)
+
+            elif person.socket not in [x.socket for x in persons[client].blocked_users]:
+                msg_dict['active_users'] = [x for x in usernames if x not in [x.username for x in persons[client].blocked_users]]
+                encoded_data = json.dumps(msg_dict).encode()
+                person.socket.send(encoded_data)
+
         except Exception as e:
             print(f'SERVER - ERROR SENDING MESSAGE TO CLIENT. RETURNED EXCEPTION WAS:\n{e}\nREFRESHING CONNECTIONS...')
-            sockets = [x.socket for x in persons]
-            usernames = [x.username for x in persons]
+            sockets = [x.socket for x in persons.values()]
+            usernames = [x.username for x in persons.values()]
 
 
 def disconnect_client(person):
@@ -48,8 +54,8 @@ def disconnect_client(person):
 def refresh_connections():
     print('Refreshing client connections...')
     broadcast("", 'SYSMSG - Refreshing connections...')
-    sockets = [x.socket for x in persons]
-    usernames = [x.username for x in persons]
+    sockets = [x.socket for x in persons.values()]
+    usernames = [x.username for x in persons.values()]
     print(f'Active connections: {len(sockets)}')
     print(f'users in chat: {usernames}')
 
@@ -81,7 +87,7 @@ def client_communication(person):
 
             if msg_dict['msg'] in ['!quit', '/q']:
                 disconnect_client(person)
-                persons.remove(person)
+                persons.pop(person.username, None)
                 refresh_connections()
                 break
 
@@ -98,31 +104,47 @@ def client_communication(person):
         except Exception as e:
             print(f'SERVER - ISSUE WITH CLIENT CONNECTION. RETURNED EXCEPTION WAS:\n{e}\nCLOSING CONNECTION...')
             disconnect_client(person)
-            persons.remove(person)
+            persons.pop(person.username, None)
             refresh_connections()
             break
 
 
 # Chat commands
-def whisper(msg, person):
+def whisper(msg, sender):
     # triggered when client uses /w <username>
-    target_user = msg[2]
+    target = persons[msg[2]]
+    whisper = " ".join(msg[3:])
 
-    if target_user in [x for x in usernames if x != person.username]:
-        for target in [x for x in persons if x.username == target_user]:
-            whisper = " ".join(msg[3:])
-            msg_dict = {'username': "", 'msg': "", 'active_users': usernames, 'trigger': None}
-            to_sender = f'whisper to {target.username}: {whisper}'
-            to_target = f'whisper from {person.username}: {whisper}'
+    msg_dict = {'username': "", 'msg': "", 'active_users': usernames, 'trigger': None}
+    to_sender = f'whisper to {target.username}: {whisper}'
+    to_target = f'whisper from {sender.username}: {whisper}'
 
-            msg_dict['msg'] = to_sender
-            person.socket.send(json.dumps(msg_dict).encode())
+    msg_dict['msg'] = to_sender
+    sender.socket.send(json.dumps(msg_dict).encode())
 
-            msg_dict['msg'] = to_target
-            msg_dict['trigger'] = 'whisper'
-            target.socket.send(json.dumps(msg_dict).encode())
+    msg_dict['msg'] = to_target
+    msg_dict['trigger'] = 'whisper'
+    target.socket.send(json.dumps(msg_dict).encode())
 
-            print(f'whisper from {person.username} to {target.username}: {whisper}')
+    print(f'whisper from {sender.username} to {target.username}: {whisper}')
+
+
+def block_user(msg, person):
+    target = persons[msg[2]]
+    person.blocked_users.append(target)
+    target.blocked_users.append(person)
+    msg_dict = {'username': "", 'msg': f"{target.username} has now been blocked", 'active_users': usernames, 'trigger': None}
+    person.socket.send(json.dumps(msg_dict).encode())
+    print(f'{person.username} has blocked {target.username}')
+
+
+def unblock_user(msg, person):
+    target = persons[msg[2]]
+    person.blocked_users.remove(target)
+    target.blocked_users.remove(person)
+    msg_dict = {'username': "", 'msg': f"{target.username} has now been unblocked", 'active_users': usernames, 'trigger': None}
+    person.socket.send(json.dumps(msg_dict).encode())
+    print(f'{person.username} has unblocked {target.username}')
 
 
 def self_command(msg, person):
@@ -132,8 +154,10 @@ def self_command(msg, person):
     broadcast("", self_msg)
 
 
-chat_commands = {'/w': whisper,
-                 '/me': self_command, }
+chat_commands = {'/b': block_user,
+                 '/me': self_command,
+                 '/ub': unblock_user,
+                 '/w': whisper, }
 
 
 while live:
@@ -141,10 +165,10 @@ while live:
         c_socket, addr = sock.accept()
         username = c_socket.recv(MAX_BYTES).decode('utf-8')
         person = Person(c_socket, addr, username)
-        persons.append(person)
 
-        sockets = [x.socket for x in persons]
-        usernames = [x.username for x in persons]
+        persons[username] = person
+        sockets = [x.socket for x in persons.values()]
+        usernames = [x.username for x in persons.values()]
 
         client_thread = Thread(target=client_communication, args=(person,))
         client_thread.start()

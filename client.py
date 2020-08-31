@@ -1,11 +1,12 @@
 import sys
 import socket
 import json
+from datetime import datetime
 from threading import Thread
 from playsound import playsound
 import qt_elements as gui
 
-IP = 'XX.XX.XX.XX'
+IP = '192.168.0.5'
 PORT = 8085
 ADDR = (IP, PORT)
 MAX_BYTES = 1024
@@ -21,6 +22,7 @@ class UserClient:
         self.chat_window = gui.ChatWindow()
 
         self.chat_window.message.returnPressed.connect(self.send_msg)
+        self.chat_window.send_button.clicked.connect(self.send_msg)
         self.username_window.submit_button.clicked.connect(self.set_username)
         self.username_window.user_submission.returnPressed.connect(self.set_username)
 
@@ -60,8 +62,7 @@ class UserClient:
         playsound('user_offline.wav', block=False)
 
     def whisper_sound(self):
-        if not self.chat_window.isActiveWindow():
-            playsound('whisper.wav', block=False)
+        playsound('whisper.wav', block=False)
 
     def recv_msg(self):
         # receives data sent by the server; checks for message, updates [self.online_users], then updates [self.new_msgs] (as appropriate)
@@ -69,6 +70,8 @@ class UserClient:
             try:
                 data = sock.recv(MAX_BYTES).decode('utf-8')
                 msg_dict = json.loads(data)
+                now = datetime.now()
+                time = now.strftime('%H:%M:%S')
                 display_msg = ''
 
                 if msg_dict['msg']:
@@ -78,9 +81,9 @@ class UserClient:
                         self.online_users.remove(offline_user)
 
                     if msg_dict['username']:
-                        display_msg = f"{msg_dict['username']}: {msg_dict['msg']}"
+                        display_msg = f"[{time}] {msg_dict['username']}: {msg_dict['msg']}"
                     else:
-                        display_msg = msg_dict['msg'].lstrip()
+                        display_msg = f"[{time}] {msg_dict['msg'].lstrip()}"
 
                     if 'SYSMSG' not in display_msg:
                         self.new_msgs.append(display_msg)
